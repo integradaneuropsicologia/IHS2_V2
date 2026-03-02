@@ -1049,6 +1049,7 @@ function normalizeOption(option) {
 function renderDynamicForm(questions = []) {
   const form = $("testForm");
   form.innerHTML = "";
+  form.noValidate = true;
 
   questions.forEach((q, index) => {
     const row = document.createElement("div");
@@ -1258,6 +1259,17 @@ function buildResultsPerguntasRespostas(questions, answersObj) {
 
   return respostas;
 }
+// === POLYFILL CSS.escape (salva em alguns mobiles/webviews) ===
+(function () {
+  if (!window.CSS) window.CSS = {};
+  if (typeof window.CSS.escape !== "function") {
+    window.CSS.escape = function (value) {
+      return String(value).replace(/[^a-zA-Z0-9_\-]/g, function (ch) {
+        return "\\" + ch;
+      });
+    };
+  }
+})();
 
 
 function formDataToObject(formEl) {
@@ -1529,17 +1541,17 @@ function markInvalidRequired(questions, formEl){
 function scrollToRow(row){
   if (!row) return;
 
-  // scroll confiável no mobile
-  row.scrollIntoView({ behavior: "smooth", block: "center" });
+  // calcula posição absoluta
+  const y = row.getBoundingClientRect().top + window.pageYOffset - 12;
 
-  // tenta focar no primeiro controle da pergunta (sem bagunçar o scroll)
-  const focusEl = row.querySelector("input, textarea, select");
-  if (focusEl) {
-    setTimeout(() => {
-      try { focusEl.focus({ preventScroll: true }); }
-      catch { focusEl.focus(); }
-    }, 250);
-  }
+  // método mais confiável em mobile/webview
+  window.scrollTo({ top: y, left: 0, behavior: "smooth" });
+
+  // fallback "forçado" (caso smooth seja ignorado)
+  setTimeout(() => {
+    document.documentElement.scrollTop = y;
+    document.body.scrollTop = y;
+  }, 80);
 }
     /**************************************************************
      * ENVIO DO FORMULÁRIO (EXEMPLO)
@@ -1554,23 +1566,31 @@ function scrollToRow(row){
   clearInvalidUI(formEl);
 
   // (opcional) validações nativas (email, pattern etc.)
-  if (!formEl.checkValidity()) {
-    if (typeof formEl.reportValidity === "function") formEl.reportValidity();
+ if (!formEl.checkValidity()) {
+  const isMobile = window.matchMedia("(pointer: coarse)").matches;
 
-    // marca e scroll pro primeiro inválido (mobile friendly)
-    const invalidRows = markInvalidRequired(FORM_QUESTIONS, formEl);
-    setStatus("Responda as perguntas obrigatórias destacadas em vermelho.", "warn");
-    scrollToRow(invalidRows[0] || formEl.querySelector(":invalid")?.closest(".row"));
-    return;
+  // no desktop pode usar bolha nativa; no mobile isso atrapalha
+  if (!isMobile && typeof formEl.reportValidity === "function") {
+    formEl.reportValidity();
   }
+
+  const invalidRows = markInvalidRequired(FORM_QUESTIONS, formEl);
+  setStatus("Responda as perguntas obrigatórias destacadas em vermelho.", "warn");
+
+  const targetRow = invalidRows[0] || formEl.querySelector(":invalid")?.closest(".row");
+
+  // dá 1 tick pra aplicar classes antes do scroll (mobile)
+  setTimeout(() => scrollToRow(targetRow), 50);
+  return;
+}
 
   // valida obrigatórias do seu modelo (especialmente radios)
   const invalidRows = markInvalidRequired(FORM_QUESTIONS, formEl);
-  if (invalidRows.length) {
-    setStatus("Responda as perguntas obrigatórias destacadas em vermelho.", "warn");
-    scrollToRow(invalidRows[0]);
-    return;
-  }
+ if (invalidRows.length) {
+  setStatus("Responda as perguntas obrigatórias destacadas em vermelho.", "warn");
+  setTimeout(() => scrollToRow(invalidRows[0]), 50);
+  return;
+}
 
   const btn = $("submitBtn");
   btn.disabled = true;

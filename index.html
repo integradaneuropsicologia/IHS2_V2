@@ -1625,17 +1625,32 @@ const scoring = buildScoringResult(FORM_QUESTIONS, rawPayload, INDICATORS_CONFIG
 const resultsPayload = respostasLegiveis;
 
 // results_meta = SOMENTE soma dos indicadores configurados
-const resultsMetaPayload = Object.fromEntries(
-  Object.entries(scoring.indicators).flatMap(([key, indicator]) => {
-    const cfg = INDICATORS_CONFIG[key];
-    const rule = interpretByCutoffs(indicator.sum, cfg?.cutoffs);
+const resultsMetaPayload = [];
+let metaOrder = 1;
 
-    return [
-      [key, indicator.sum], // soma
-      [`${key}_interpretacao`, rule?.text ?? null] // texto da faixa
-    ];
-  })
-);
+Object.entries(INDICATORS_CONFIG).forEach(([key, cfg]) => {
+  const indicator = scoring.indicators[key];
+  if (!indicator) return;
+
+  resultsMetaPayload.push({
+    order: metaOrder++,
+    key,
+    label: cfg.label || key,
+    value: indicator.sum
+  });
+
+  if (Array.isArray(cfg?.cutoffs) && cfg.cutoffs.length) {
+    const rule = interpretByCutoffs(indicator.sum, cfg.cutoffs);
+    if (rule?.text) {
+      resultsMetaPayload.push({
+        order: metaOrder++,
+        key: `${key}_interpretacao`,
+        label: `${cfg.label || key} - interpretação`,
+        value: rule.text
+      });
+    }
+  }
+});
 
     // 1) Revalida no patients (não confiar só na validação inicial)
     const { data: patient, error: patientError } = await supabaseClient

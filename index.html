@@ -957,6 +957,24 @@ function buildUpdatedTestsFeitos(currentTestsFeitos, testCode, submittedAtIso) {
   return next;
 }
 
+async function updatePatientFormDone({ patient, testCode, submittedAt }) {
+  const evaluationId = patient?.evaluation_id || null;
+  const nextTestsFeitos = buildUpdatedTestsFeitos(
+    patient?.tests_feitos,
+    testCode,
+    submittedAt
+  );
+
+  if (evaluationId) {
+    return { data: null, error: null };
+  }
+
+  return supabaseClient
+    .from("patients")
+    .update({ tests_feitos: nextTestsFeitos })
+    .eq("cpf", patient.cpf);
+}
+
 function interpretByCutoffs(score, cutoffs) {
   if (!Number.isFinite(score) || !Array.isArray(cutoffs)) return null;
 
@@ -1771,7 +1789,8 @@ Object.entries(INDICATORS_CONFIG).forEach(([key, cfg]) => {
       code: testCode,
       submitted_at: submittedAt,
       results: resultsPayload,          // array puro pergunta/resposta
-      results_meta: resultsMetaPayload  // bruto + pontuação
+      results_meta: resultsMetaPayload,  // bruto + pontuação
+      evaluation_id: patient.evaluation_id || null
     }
   ]);
 
@@ -1782,15 +1801,12 @@ Object.entries(INDICATORS_CONFIG).forEach(([key, cfg]) => {
   );
 }
 
-    // 3) Atualiza tests_feitos no patients (JSONB)
-    const nextTestsFeitos = buildUpdatedTestsFeitos(patient.tests_feitos, testCode, submittedAt);
-
-    const { error: updateError } = await supabaseClient
-      .from("patients")
-      .update({
-        tests_feitos: nextTestsFeitos
-      })
-      .eq("cpf", cpf);
+    // 3) Atualiza tests_feitos no ciclo de avaliacao, quando houver.
+    const { error: updateError } = await updatePatientFormDone({
+      patient,
+      testCode,
+      submittedAt
+    });
 
     if (updateError) {
       console.error(updateError);

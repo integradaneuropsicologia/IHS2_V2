@@ -893,6 +893,24 @@ const INDICATORS_CONFIG = {
       return true;
     }
 
+    async function hasRespostaSalva(cpf, testCode) {
+      const cleanCpf = normalizeCPF(cpf);
+      if (!cleanCpf || !testCode) return false;
+
+      const { count, error } = await supabaseClient
+        .from("respostas")
+        .select("code", { count: "exact", head: true })
+        .eq("cpf", cleanCpf)
+        .eq("code", testCode);
+
+      if (error) {
+        console.warn("Não foi possível verificar resposta salva.", error);
+        return false;
+      }
+
+      return Number(count || 0) > 0;
+    }
+
     function redirectToAreaPaciente() {
       const token = getTokenFromUrl();
       window.location.href = token ? `${AREA_PACIENTE_URL}?token=${encodeURIComponent(token)}` : AREA_PACIENTE_URL;
@@ -1096,6 +1114,13 @@ function interpretByCutoffs(score, cutoffs) {
       if (feito) {
         setStatus("Teste já realizado. Redirecionando para a área do paciente...", "ok");
         setTimeout(() => redirectToAreaPaciente(cpf), 700);
+        return;
+      }
+
+      const respostaSalva = await hasRespostaSalva(data.cpf || cpf, testCode);
+      if (respostaSalva) {
+        setStatus("Teste já possui resposta salva. Redirecionando para a área do paciente...", "ok");
+        setTimeout(() => redirectToAreaPaciente(data.cpf || cpf), 700);
         return;
       }
 
@@ -1760,6 +1785,12 @@ Object.entries(INDICATORS_CONFIG).forEach(([key, cfg]) => {
     if (jaFeito) {
       // já feito -> volta pra área do paciente
       redirectToAreaPaciente(cpf);
+      return;
+    }
+
+    const respostaSalva = await hasRespostaSalva(patient.cpf || cpf, testCode);
+    if (respostaSalva) {
+      redirectToAreaPaciente(patient.cpf || cpf);
       return;
     }
 
